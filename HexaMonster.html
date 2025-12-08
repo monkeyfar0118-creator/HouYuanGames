@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hexa Sort - 优化体验版</title>
+    
+    <!-- ========================================== -->
+    <!-- 1. 这里适配你的 ICON (请确保 icon.png 在同目录下) -->
+    <!-- ========================================== -->
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="apple-touch-icon" href="icon.png">
+    <!-- ========================================== -->
+
+    <style>
+        :root {
+            --bg-color: #15386d;
+            --hex-w: 56px;  
+            --hex-h: 64px;  
+            --gap-x: 58px;  
+            --gap-y: 50px; 
+            --layer-h: 6px; 
+            --game-font: 'Segoe UI Black', 'Roboto Black', 'Arial Black', 'Arial', sans-serif;
+        }
+
+        body {
+            background: radial-gradient(circle at center, #1e4db7 0%, #0b2568 100%);
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            font-family: var(--game-font);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none; 
+        }
+
+        /* --- 自定义光标 --- */
+        body.cursor-bolt {
+            cursor: url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='glow'%3E%3CfeDropShadow dx='0' dy='0' stdDeviation='2' flood-color='white'/%3E%3C/filter%3E%3Cpath d='M18 2 L8 16 L14 16 L10 30 L24 12 L16 12 L20 2 Z' fill='%23FFD700' stroke='white' stroke-width='1.5' filter='url(%23glow)'/%3E%3C/svg%3E") 16 16, auto;
+        }
+        body.claw-mode { cursor: grab; }
+        body.claw-mode:active { cursor: grabbing; }
+
+        /* --- 顶部UI --- */
+        .coin-display {
+            position: fixed; left: 20px; top: 20px;
+            background: transparent; padding: 0; border: none;
+            display: flex; align-items: center; gap: 8px;
+            font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            color: white; transition: transform 0.1s;
+            z-index: 10001; pointer-events: none;
+        }
+        .coin-display.scale-bump { transform: scale(1.4); }
+        .coin-display.shake { animation: shakeCoin 0.4s ease-in-out; color: #ff4757; }
+        @keyframes shakeCoin { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+        
+        /* 原生SVG图标样式 */
+        .coin-svg-icon { width: 28px; height: 28px; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5)); }
+        .coin-symbol { 
+            font-family: 'Arial Black', 'Arial', sans-serif; 
+            font-weight: 900; 
+            text-shadow: none !important; 
+            stroke: none;
+        }
+
+        /* 2. 位图图标样式 (如果你决定用 icon.png 替换金币) */
+        .coin-bitmap-icon {
+            width: 32px; height: 32px; 
+            object-fit: contain; /* 保持比例 */
+            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5));
+        }
+
+        header { margin-top: 60px; color: white; text-align: center; pointer-events: none; z-index: 100; width: 100%; position: relative; }
+        .level-info { font-size: 16px; opacity: 0.8; letter-spacing: 2px; margin-bottom: 5px; text-transform: uppercase; }
+        #score { font-size: 50px; font-weight: 900; margin: 0; text-shadow: 0 4px 15px rgba(0,0,0,0.4); }
+        #target-score { font-size: 14px; opacity: 0.6; margin-top: 5px; }
+
+        /* --- 弹窗系统 --- */
+        .overlay-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(11, 37, 104, 0.95); backdrop-filter: blur(10px); z-index: 9999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            color: white; transition: opacity 0.3s, transform 0.3s, visibility 0.3s; visibility: visible; 
+        }
+        .hidden { opacity: 0; transform: scale(1.1); pointer-events: none !important; visibility: hidden; }
+        
+        .menu-card { 
+            background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255,255,255,0.2); 
+            padding: 40px 30px; border-radius: 30px; text-align: center; 
+            box-shadow: 0 20px 50px rgba(0,0,0,0.4); width: 280px; 
+        }
+        
+        .menu-title { font-size: 48px; margin-bottom: 5px; background: linear-gradient(to bottom, #fff, #aecfff); -webkit-background-clip: text; color: transparent; text-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .menu-title.gold-text { background: linear-gradient(to bottom, #ffd700, #ff8f00); -webkit-background-clip: text; color: transparent; text-shadow: 0 5px 15px rgba(255, 143, 0, 0.4); font-size: 52px; }
+        
+        .level-badge { background: #ff4757; padding: 5px 15px; border-radius: 20px; font-size: 14px; display: inline-block; margin-bottom: 20px; box-shadow: 0 5px 15px rgba(255, 71, 87, 0.4); }
+        .reward-box { display: flex; align-items: center; justify-content: center; gap: 10px; background: rgba(0,0,0,0.2); padding: 10px 20px; border-radius: 15px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.1); }
+        
+        .btn-group { display: flex; flex-direction: column; gap: 15px; width: 100%; }
+        
+        .btn { background: linear-gradient(180deg, #40c4ff 0%, #0091ea 100%); border: none; padding: 15px 20px; border-radius: 50px; color: white; font-family: var(--game-font); font-size: 20px; cursor: pointer; box-shadow: 0 6px 0 #006bad, inset 0 2px 0 rgba(255,255,255,0.4); transition: transform 0.1s, box-shadow 0.1s; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; }
+        .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #006bad, inset 0 2px 0 rgba(255,255,255,0.4); }
+        .btn-secondary { background: #8daec9; box-shadow: 0 6px 0 #546e7a; font-size: 18px; }
+        .btn-secondary:active { box-shadow: 0 2px 0 #546e7a; }
+        .btn-ad { background: linear-gradient(180deg, #b388ff 0%, #651fff 100%); box-shadow: 0 6px 0 #311b92; }
+        .btn-ad:active { box-shadow: 0 2px 0 #311b92; }
+        .btn-green { background: linear-gradient(180deg, #69f0ae 0%, #00c853 100%); box-shadow: 0 6px 0 #00600f; }
+        .btn-green:active { box-shadow: 0 2px 0 #00600f; }
+
+        .ad-icon { width: 24px; height: 24px; background: white; border-radius: 4px; color: #651fff; font-size: 12px; font-weight: bold; display: flex; align-items: center; justify-content: center; margin-right: 5px; }
+
+        /* --- 游戏场景 --- */
+        #game-stage { position: relative; width: 360px; height: 440px; margin: 10px 0; z-index: 1; }
+
+        /* --- 道具栏 --- */
+        #tools-bar { display: flex; gap: 20px; margin-bottom: 20px; margin-top: auto; z-index: 200; }
+        .tool-btn {
+            width: 70px; height: 70px; background: rgba(0,0,0,0.3); border-radius: 20px;
+            border: 2px solid rgba(255,255,255,0.15); display: flex; flex-direction: column; justify-content: center; align-items: center;
+            cursor: pointer; transition: transform 0.1s; position: relative; overflow: hidden;
+        }
+        .tool-btn:active { transform: scale(0.92); }
+        .tool-btn.active { background: rgba(255, 255, 255, 0.15); border-color: #fff; box-shadow: 0 0 20px rgba(255,255,255,0.3); }
+        .tool-svg { width: 40px; height: 40px; margin-bottom: 2px; filter: drop-shadow(0 3px 0 rgba(0,0,0,0.3)); }
+        .tool-cost { font-size: 14px; color: #fff; font-weight: bold; display: flex; align-items: center; gap: 3px; text-shadow: 0 2px 2px rgba(0,0,0,0.5); }
+        .tool-cost::before { content:''; width: 10px; height: 10px; background: #ffd700; border-radius: 50%; display: inline-block; box-shadow: 0 0 5px #ff8f00; }
+
+        /* --- 底部 Dock --- */
+        #dock-bg { background: transparent; display: flex; gap: 30px; z-index: 2000; padding: 15px 30px; margin-bottom: 20px; }
+        .dock-slot { width: var(--hex-w); height: var(--hex-h); position: relative; display: flex; justify-content: center; align-items: center; }
+
+        /* --- 格子与方块 --- */
+        .grid-base {
+            position: absolute; width: var(--hex-w); height: var(--hex-h);
+            background-color: #8daec9; opacity: 0.4; transition: all 0.2s;
+            -webkit-mask: url("data:image/svg+xml,%3Csvg width='56' height='64' viewBox='0 0 56 64' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M28 0 L56 16 L56 48 L28 64 L0 48 L0 16 Z'/%3E%3C/svg%3E") no-repeat center / contain;
+            mask: url("data:image/svg+xml,%3Csvg width='56' height='64' viewBox='0 0 56 64' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M28 0 L56 16 L56 48 L28 64 L0 48 L0 16 Z'/%3E%3C/svg%3E") no-repeat center / contain;
+        }
+        .grid-base.highlight-target { opacity: 1; background-color: #ffffff; box-shadow: 0 0 15px #ffffff; z-index: 50; }
+        .bolt-hover-glow { opacity: 1 !important; background-color: #ffeaa7 !important; box-shadow: 0 0 25px #ffd700 !important; z-index: 50; }
+
+        .stack-container {
+            position: absolute; width: var(--hex-w); height: var(--hex-h);
+            transition: left 0.2s ease-out, top 0.2s ease-out;
+            filter: drop-shadow(0 10px 5px rgba(0,0,0,0.3));
+        }
+        .stack-container.in-dock { cursor: grab; pointer-events: auto; z-index: 2001; }
+        .stack-container.in-dock:active { cursor: grabbing; transform: scale(0.95); }
+
+        .pop-in { animation: popInEffect 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; transform: scale(0); }
+        @keyframes popInEffect { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+
+        .chip-layer {
+            position: absolute; width: 100%; height: 100%; left: 0; pointer-events: none;
+            -webkit-mask: url("data:image/svg+xml,%3Csvg width='56' height='64' viewBox='0 0 56 64' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M28 0 L56 16 L56 48 L28 64 L0 48 L0 16 Z'/%3E%3C/svg%3E") no-repeat center / contain;
+            mask: url("data:image/svg+xml,%3Csvg width='56' height='64' viewBox='0 0 56 64' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M28 0 L56 16 L56 48 L28 64 L0 48 L0 16 Z'/%3E%3C/svg%3E") no-repeat center / contain;
+            transition: filter 0.2s;
+        }
+        .stack-container .chip-layer:last-child::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.8) 45%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0.8) 55%, transparent 70%);
+            background-size: 250% 100%; background-position: 100% 0; 
+            animation: shimmerMove 4s infinite cubic-bezier(0.4, 0.0, 0.2, 1);
+            pointer-events: none; z-index: 10; mix-blend-mode: soft-light;
+        }
+        @keyframes shimmerMove { 0% { background-position: 150% 0; } 20% { background-position: -50% 0; } 100% { background-position: -50% 0; } }
+
+        .c-red { background-color: #ff4757; } .c-blue { background-color: #1e90ff; } .c-green { background-color: #2ed573; } .c-yellow { background-color: #ffa502; } .c-purple { background-color: #8e44ad; }
+        
+        .chip-flash-seq { filter: brightness(5) contrast(0.5) !important; box-shadow: 0 0 20px rgba(255, 255, 255, 1); z-index: 99; }
+        
+        .count-label {
+            position: absolute; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center;
+            color: white; font-family: var(--game-font); font-weight: 900; font-size: 32px; text-shadow: 0 2px 4px rgba(0,0,0,0.6); z-index: 50; pointer-events: none;
+        }
+        
+        .lightning-strike-fx { position: absolute; width: 40px; height: 1000px; left: 0; bottom: 0; background: linear-gradient(to right, transparent, #fff 50%, transparent); z-index: 9999; pointer-events: none; opacity: 0; }
+        .spark-particle { position: absolute; width: 6px; height: 6px; border-radius: 50%; pointer-events: none; z-index: 8000; box-shadow: 0 0 5px rgba(255,255,255,0.8); }
+        .confetti { position: fixed; width: 12px; height: 12px; z-index: 10002; pointer-events: none; border-radius: 2px; }
+        .flying-coin { position: fixed; width: 28px; height: 28px; z-index: 10000; pointer-events: none; }
+        .dragging-clone { position: fixed; z-index: 9999 !important; pointer-events: none; transition: none; filter: drop-shadow(0 20px 30px rgba(0,0,0,0.4)); will-change: left, top; }
+        .dragging-clone.smooth-move { transition: left 0.15s cubic-bezier(0.1, 0.7, 0.1, 1), top 0.15s cubic-bezier(0.1, 0.7, 0.1, 1); }
+        .flying-chip { width: 56px; height: 64px; position: absolute; z-index: 5000; transition: left 0.08s linear, top 0.08s linear; }
+        
+        /* --- 吉祥物 --- */
+        .mascot-wrapper { 
+            position: relative; width: 100px; height: 100px; margin: 0 auto 25px auto; 
+            animation: mascotFloat 3s ease-in-out infinite; 
+            transform-origin: center bottom; 
+            cursor: pointer;
+        }
+        @keyframes blinkAnim { 0%, 96% { transform: scaleY(1); } 98% { transform: scaleY(0.1); } 100% { transform: scaleY(1); } }
+        @keyframes mascotBounce {
+            0% { transform: scale(1, 1); }
+            30% { transform: scale(1.25, 0.75); }
+            40% { transform: scale(0.75, 1.25); }
+            50% { transform: scale(1.15, 0.85); }
+            65% { transform: scale(0.95, 1.05); }
+            75% { transform: scale(1.05, 0.95); }
+            100% { transform: scale(1, 1); }
+        }
+        .mascot-wrapper.clicked { animation: mascotBounce 0.5s ease-out !important; }
+        .m-body { width: 100%; height: 100%; background-color: #ffd54f; border-radius: 24px; position: relative; z-index: 2; box-shadow: 0 8px 0 #ff8f00; transition: background-color 0.3s; }
+        .m-horn { position: absolute; width: 24px; height: 30px; background-color: #ff8f00; border-radius: 12px; top: -12px; z-index: 1; }
+        .m-horn.left { left: 12px; transform: rotate(-15deg); } .m-horn.right { right: 12px; transform: rotate(15deg); }
+        .m-eye { position: absolute; width: 28px; height: 28px; background: white; border-radius: 50%; top: 30px; animation: blinkAnim 4s infinite; transition: all 0.1s; }
+        .m-eye::after { content: ''; position: absolute; width: 10px; height: 10px; background: #212121; border-radius: 50%; top: 8px; right: 6px; }
+        .m-eye.left { left: 16px; } .m-eye.right { right: 16px; }
+        .mascot-wrapper.clicked .m-eye { height: 4px; top: 42px; border-radius: 4px; animation: none; }
+        .mascot-wrapper.clicked .m-eye::after { display: none; }
+        .m-mouth { position: absolute; width: 16px; height: 8px; border-bottom: 3px solid #212121; border-radius: 50%; left: 50%; margin-left: -8px; bottom: 25px; transition: all 0.2s; }
+        .mascot-wrapper.happy .m-mouth, .mascot-wrapper.clicked .m-mouth { height: 14px; border-bottom: 4px solid #212121; width: 22px; margin-left: -11px; bottom: 28px; }
+        .mascot-wrapper.sad .m-body { background-color: #90a4ae; box-shadow: 0 8px 0 #546e7a; }
+        .mascot-wrapper.sad .m-horn { background-color: #546e7a; }
+        .mascot-wrapper.sad .m-mouth { bottom: 20px; border-bottom: none; border-top: 3px solid #212121; margin-left: -8px; }
+        .mascot-wrapper.sad { animation: none; transform: translateY(5px); cursor: default; }
+        .mascot-wrapper.sad .m-eye { animation: none; }
+        @keyframes mascotFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    /* ========================================= */
+    /*        横屏适配模式 (稳定修复版 V3)        */
+    /* ========================================= */
+    @media screen and (orientation: landscape) and (min-height: 400px) {
+        body {
+            display: grid;
+            grid-template-columns: 80px 1fr 100px; /* 左道具 | 中游戏 | 右备选 */
+            grid-template-rows: min-content 1fr;
+            grid-template-areas: 
+                "tools header dock"
+                "tools stage  dock";
+            align-items: center;
+            justify-items: center;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            gap: 0;
+        }
+
+        /* 左侧道具栏 */
+        #tools-bar {
+            grid-area: tools;
+            flex-direction: column;
+            width: 100%; height: 100%;
+            justify-content: center;
+            margin: 0; padding: 0;
+            z-index: 2000; /* 提高层级，确保可点击 */
+            pointer-events: auto; /* 确保接收点击 */
+        }
+        .tool-btn { transform: scale(0.85); margin: 8px 0; }
+
+        /* 右侧备选 Dock */
+        #dock-bg {
+            grid-area: dock;
+            flex-direction: column;
+            width: 100%; height: 100%;
+            justify-content: center;
+            padding: 0; margin: 0;
+            z-index: 2000; /* 提高层级 */
+            pointer-events: auto;
+        }
+        .dock-slot { margin: 15px 0; }
+
+        /* 中间分数区 */
+        header {
+            grid-area: header;
+            margin-top: 40px;
+            align-self: end;
+            z-index: 100;
+            pointer-events: none; /* 让点击穿透标题区域 */
+        }
+
+        /* 中间游戏区 */
+        #game-stage {
+            grid-area: stage;
+            margin: 0;
+            align-self: center;
+            transform: scale(0.85);
+            z-index: 10;
+        }
+
+        /* 金币 */
+        .coin-display { left: 20px; top: 15px; }
+        
+        /* 强制拖拽物体在最上层 */
+        .dragging-clone { z-index: 99999 !important; }
+    }
+
+    </style>
+</head>
+<body>
+
+<div class="coin-display" id="coin-ui">
+    <!-- 
+      ========================================== 
+      3. 这里是金币图标显示区域
+      如果你想用你的 icon.png 替换原来的SVG金币，
+      请把下面的 <svg>...</svg> 删掉（或注释掉），
+      然后把下面注释的 <img> 标签打开即可。
+      ========================================== 
+    -->
+    
+    <!-- 默认: 优化后的SVG金币 -->
+    <svg class="coin-svg-icon" viewBox="0 0 32 32">
+        <circle cx="16" cy="16" r="15" fill="#FFC107" stroke="#FF8F00" stroke-width="2"/>
+        <circle cx="16" cy="16" r="10" fill="#FFD54F"/>
+        <path d="M16 8L18 12H14Z" fill="#FFF9C4" opacity="0.6"/>
+        <text x="16" y="22" class="coin-symbol" font-size="16" fill="#FF8F00" text-anchor="middle">$</text>
+    </svg>
+
+    <!-- 选项: 使用你的位图 icon.png (去掉下面的注释即可启用) -->
+    <!-- <img src="icon.png" class="coin-bitmap-icon" alt="Coin"> -->
+    
+    <span id="coin-count">500</span>
+</div>
+
+<!-- 主菜单 -->
+<div id="main-menu" class="overlay-screen">
+    <div class="mascot-wrapper" onclick="pokeMascot(this)">
+        <div class="m-horn left"></div><div class="m-horn right"></div>
+        <div class="m-body"><div class="m-eye left"></div><div class="m-eye right"></div><div class="m-mouth"></div></div>
+    </div>
+    <div class="menu-title">HEXA SORT</div>
+    <div class="menu-card">
+        <div class="level-badge" id="menu-level-badge">LEVEL 1</div>
+        <div class="btn-group">
+            <button class="btn" id="btn-start">PLAY</button>
+            <button class="btn btn-secondary" id="btn-sound">SOUND: ON</button>
+        </div>
+    </div>
+</div>
+
+<!-- 升级胜利界面 -->
+<div id="level-up-screen" class="overlay-screen hidden">
+    <div class="mascot-wrapper happy" onclick="pokeMascot(this)">
+        <div class="m-horn left"></div><div class="m-horn right"></div>
+        <div class="m-body" style="background-color: #69f0ae; box-shadow: 0 8px 0 #00c853;"> 
+            <div class="m-eye left"></div><div class="m-eye right"></div><div class="m-mouth"></div>
+        </div>
+    </div>
+    <div class="menu-title gold-text">AWESOME!</div>
+    <div class="menu-card">
+        <div style="font-size: 20px; margin-bottom: 10px; opacity: 0.9">LEVEL COMPLETED</div>
+        <div class="reward-box" id="reward-display-area">
+            <!-- 奖励框里的金币图标，同样逻辑，想换位图可以换 -->
+             <svg class="coin-svg-icon" style="width:24px; height:24px;" viewBox="0 0 32 32">
+                <circle cx="16" cy="16" r="15" fill="#FFC107" stroke="#FF8F00" stroke-width="2"/>
+                <circle cx="16" cy="16" r="10" fill="#FFD54F"/>
+                <text x="16" y="22" class="coin-symbol" font-size="16" fill="#FF8F00" text-anchor="middle">$</text>
+            </svg>
+            <!-- <img src="icon.png" class="coin-bitmap-icon" style="width:24px;height:24px;" alt="Coin"> -->
+            
+            <div class="reward-text" id="win-coin-text">+50</div>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-ad" id="btn-double-claim">
+                <div class="ad-icon">AD</div> DOUBLE CLAIM
+            </button>
+            <button class="btn btn-green" id="btn-claim">CLAIM</button>
+        </div>
+    </div>
+</div>
+
+<!-- 失败界面 -->
+<div id="game-over-screen" class="overlay-screen hidden">
+    <div class="mascot-wrapper sad">
+        <div class="m-horn left"></div><div class="m-horn right"></div>
+        <div class="m-body">
+            <div class="m-eye left"></div><div class="m-eye right"></div><div class="m-mouth"></div>
+        </div>
+    </div>
+    <div class="menu-title" style="color: #ff4757; background: none;">NO MOVES!</div>
+    <div class="menu-card">
+        <div style="font-size: 16px; margin-bottom: 20px; opacity: 0.8">Don't give up!</div>
+        <div class="btn-group">
+            <button class="btn btn-ad" id="btn-revive">
+                <div class="ad-icon">AD</div> REVIVE & CLEAR
+            </button>
+            <button class="btn btn-secondary" id="btn-restart">RESTART</button>
+        </div>
+    </div>
+</div>
+
+<header>
+    <div class="level-info" id="ui-level">LEVEL 1</div>
+    <div id="score">0</div>
+    <div id="target-score">GOAL: 15</div>
+</header>
+
+<div id="game-stage"></div>
+
+<div id="tools-bar">
+    <div class="tool-btn" id="tool-bolt" onclick="ToolManager.toggle('bolt')">
+        <svg class="tool-svg" viewBox="0 0 24 24"><path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="#FFD700" stroke="none"/></svg>
+        <div class="tool-cost">100</div>
+    </div>
+    <div class="tool-btn" id="tool-claw" onclick="ToolManager.toggle('claw')">
+        <svg class="tool-svg" viewBox="0 0 24 24">
+            <g fill="#FFFFFF" stroke="#eee" stroke-width="1">
+                <path d="M21,11c0-1.7-1.3-3-3-3c-0.2,0-0.4,0-0.6,0.1C17,6.7,15.7,5.5,14,5.5c-0.3,0-0.5,0-0.8,0.1C12.7,4.2,11.5,3,10,3
+                    C8.2,3,6.7,4.4,6.5,6.1L6.3,5.1C5.9,3.3,4.3,2,2.5,2.4c-1.8,0.4-2.9,2.2-2.5,4l2.5,11c0.5,2.2,2.4,3.8,4.7,3.8h7.8
+                    c3.3,0,6-2.7,6-6V11z" fill="white" stroke="#ccc" stroke-width="1"/>
+            </g>
+        </svg>
+        <div class="tool-cost">100</div>
+    </div>
+    <div class="tool-btn" id="tool-refresh" onclick="ToolManager.toggle('refresh')">
+        <svg class="tool-svg" viewBox="0 0 24 24">
+             <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="#69F0AE" stroke="#69F0AE" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+        </svg>
+        <div class="tool-cost">100</div>
+    </div>
+</div>
+
+<div id="dock-bg">
+    <div class="dock-slot" id="slot-0"></div>
+    <div class="dock-slot" id="slot-1"></div>
+    <div class="dock-slot" id="slot-2"></div>
+</div>
+
+<script>
+    const SoundManager = {
+        ctx: null, enabled: true,
+        init: function() { if(!this.enabled) return; if(!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); if(this.ctx.state === 'suspended') this.ctx.resume(); },
+        toggle: function() { this.enabled = !this.enabled; return this.enabled; },
+        playTone: function(freq, type, duration, vol=0.1, when=0) { if(!this.ctx || !this.enabled) return; const o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.type=type; o.frequency.setValueAtTime(freq, this.ctx.currentTime+when); g.gain.setValueAtTime(vol, this.ctx.currentTime+when); g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime+when+duration); o.connect(g); g.connect(this.ctx.destination); o.start(this.ctx.currentTime+when); o.stop(this.ctx.currentTime+when+duration); },
+        playPick: function() { this.playTone(500, 'sine', 0.1); },
+        playDrop: function() { this.playTone(150, 'triangle', 0.1); },
+        playZip: function() { this.playTone(800, 'sine', 0.05, 0.05); },
+        playFlash: function() { this.playTone(600, 'sine', 0.05, 0.1); }, 
+        playPop: function(i) { this.playTone(400 + i*50, 'triangle', 0.08, 0.2); },
+        playCoin: function() { this.playTone(1500, 'sine', 0.2, 0.1); this.playTone(2000, 'sine', 0.2, 0.05, 0.05); },
+        playError: function() { this.playTone(150, 'sawtooth', 0.2, 0.1); },
+        playThunder: function() { this.playTone(100, 'sawtooth', 0.2, 0.3); this.playTone(80, 'square', 0.4, 0.4, 0.05); },
+        playMagic: function() { this.playTone(800, 'sine', 0.3, 0.1); this.playTone(1200, 'sine', 0.3, 0.1, 0.1); },
+        playChime: function() { this.playTone(440, 'sine', 0.5, 0.1, 0); this.playTone(554, 'sine', 0.5, 0.1, 0.1); this.playTone(659, 'sine', 0.8, 0.1, 0.2); },
+        playSqueak: function() { this.playTone(600, 'sine', 0.1, 0.1); this.playTone(800, 'sine', 0.1, 0.1, 0.1); }
+    };
+
+    function pokeMascot(element) {
+        if(element.classList.contains('sad')) return; 
+        if(element.classList.contains('clicked')) return;
+        SoundManager.init(); SoundManager.playSqueak();
+        element.classList.add('clicked');
+        setTimeout(() => { element.classList.remove('clicked'); }, 500); 
+    }
+
+    const CONSTANTS = { W:56, H:64, GAP_X:58, GAP_Y:50, OFFSET_X:36, OFFSET_Y:40, LAYER_H:6, DRAG_OFFSET_Y:-80, DRAG_OFFSET_X:-20 };
+    const COLORS = ['red', 'blue', 'green', 'yellow', 'purple'];
+    const COLOR_HEX = { 'red':'#ff4757', 'blue':'#1e90ff', 'green':'#2ed573', 'yellow':'#ffa502', 'purple':'#8e44ad' };
+    const MAP_PATTERNS = {
+        'CROSS': [[0,1,1,1,0],[1,1,1,1,0],[1,1,1,1,1],[1,1,1,1,0],[0,1,1,1,0]],
+        'FULL': [[1,1,1,1,1],[1,1,1,1,1],[1,1,1,1,1],[1,1,1,1,1],[1,1,1,1,1]],
+        'RING': [[0,1,1,1,0],[1,1,0,1,1],[1,0,0,0,1],[1,1,0,1,1],[0,1,1,1,0]],
+        'HOURGLASS': [[1,1,1,1,1],[0,1,1,1,0],[0,0,1,0,0],[0,1,1,1,0],[1,1,1,1,1]],
+        'ISLANDS': [[1,1,0,1,1],[1,1,0,1,1],[0,0,1,0,0],[1,1,0,1,1],[1,1,0,1,1]],
+        'CHECKER': [[1,0,1,0,1],[0,1,0,1,0],[1,0,1,0,1],[0,1,0,1,0],[1,0,1,0,1]],
+        'H_STRIPES': [[1,1,1,1,1],[0,0,0,0,0],[1,1,1,1,1],[0,0,0,0,0],[1,1,1,1,1]],
+        'RANDOM_A': [[0,1,1,0,0],[1,1,1,1,0],[1,1,0,1,1],[0,1,1,1,1],[0,0,1,1,0]],
+        'RANDOM_B': [[1,1,0,1,1],[1,1,1,1,1],[0,1,1,1,0],[1,1,1,1,1],[1,1,0,1,1]]
+    };
+    const LEVELS = [];
+    for(let i=1; i<=20; i++) {
+        let target = 15 + (i-1) * 15; 
+        let mapKey = 'CROSS';
+        if(i > 3) mapKey = 'FULL'; if(i > 6) mapKey = 'HOURGLASS'; if(i > 9) mapKey = 'RING';
+        if(i > 12) mapKey = 'ISLANDS'; if(i > 15) mapKey = 'RANDOM_A'; if(i > 18) mapKey = 'CHECKER';
+        let prefilled = [];
+        if(i > 1) prefilled.push({r:2,c:2,items:[COLORS[i%5], COLORS[i%5]]});
+        if(i > 5) { prefilled.push({r:0,c:1,items:[COLORS[(i+1)%5]]}); prefilled.push({r:4,c:3,items:[COLORS[(i+2)%5]]}); }
+        LEVELS.push({ id:i, target:target, map: mapKey, prefilled: prefilled });
+    }
+    LEVELS.push({ id: 21, target: 99999, map: 'RANDOM_B', prefilled: [{r:2,c:2,items:['red','red']},{r:0,c:0,items:['blue']},{r:4,c:4,items:['green']}] });
+
+    let currentLevelIdx = 0; let currentMap = []; let grid = []; let dock = [null, null, null];
+    let score = 0; let playerCoins = 500; let isLock = false; let isLevelTransition = false; let eliminationCombo = 0;
+
+    const stageEl = document.getElementById('game-stage');
+    const scoreEl = document.getElementById('score');
+    const targetScoreEl = document.getElementById('target-score');
+    const levelUiEl = document.getElementById('ui-level');
+    const dockSlots = [0,1,2].map(i=>document.getElementById(`slot-${i}`));
+    const coinEl = document.getElementById('coin-count');
+    const coinUiBox = document.getElementById('coin-ui');
+    const menuEl = document.getElementById('main-menu');
+    const levelUpEl = document.getElementById('level-up-screen');
+    const gameOverEl = document.getElementById('game-over-screen');
+    const rewardBox = document.getElementById('reward-display-area');
+    const winCoinText = document.getElementById('win-coin-text');
+    const btnStart = document.getElementById('btn-start');
+    const btnSound = document.getElementById('btn-sound');
+    const btnClaim = document.getElementById('btn-claim');
+    const btnDoubleClaim = document.getElementById('btn-double-claim');
+    const btnRevive = document.getElementById('btn-revive');
+    const btnRestart = document.getElementById('btn-restart');
+    const menuBadge = document.getElementById('menu-level-badge');
+
+    const ToolManager = {
+        activeTool: null,
+        toggle: function(toolName) {
+            if(isLock || isLevelTransition) return;
+            if(this.activeTool === toolName) { this.reset(); return; }
+            if(toolName === 'refresh') { this.tryUseRefresh(); return; }
+            this.reset(); this.activeTool = toolName;
+            document.getElementById(`tool-${toolName}`).classList.add('active');
+            if(toolName === 'bolt') document.body.classList.add('cursor-bolt');
+            else if(toolName === 'claw') { document.body.classList.add('claw-mode'); this.enableClawDrag(); }
+            SoundManager.playPick();
+        },
+        reset: function() {
+            this.activeTool = null;
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.grid-base').forEach(b => b.classList.remove('bolt-hover-glow'));
+            document.querySelectorAll('.stack-container').forEach(b => b.classList.remove('bolt-target-stack'));
+            document.body.classList.remove('claw-mode', 'cursor-bolt');
+            grid.forEach(row => row.forEach(item => {
+                if(item && item.hasClawBind) {
+                    const newItem = item.el.cloneNode(true);
+                    item.el.parentNode.replaceChild(newItem, item.el);
+                    item.el = newItem; item.hasClawBind = false;
+                }
+            }));
+        },
+        checkCost: function(cost) {
+            if(playerCoins >= cost) { playerCoins -= cost; updateCoinUI(); return true; }
+            else { coinUiBox.classList.add('shake'); SoundManager.playError(); setTimeout(()=>coinUiBox.classList.remove('shake'), 400); return false; }
+        },
+        handleBoltHover: function(x, y) {
+            if(this.activeTool !== 'bolt') return;
+            let target = null, minD = 40;
+            for(let r=0; r<5; r++) for(let c=0; c<5; c++) if(currentMap[r][c]) {
+                const p = getPos(r,c); if(Math.hypot(x-(p.x+CONSTANTS.W/2), y-(p.y+CONSTANTS.H/2)) < minD) { target = {r,c}; minD = Math.hypot(x-(p.x+CONSTANTS.W/2), y-(p.y+CONSTANTS.H/2)); }
+            }
+            document.querySelectorAll('.bolt-hover-glow').forEach(el => el.classList.remove('bolt-hover-glow'));
+            document.querySelectorAll('.bolt-target-stack').forEach(el => el.classList.remove('bolt-target-stack'));
+            if(target && grid[target.r][target.c]) {
+                document.getElementById(`base-${target.r}-${target.c}`).classList.add('bolt-hover-glow');
+                grid[target.r][target.c].el.classList.add('bolt-target-stack');
+            }
+        },
+        handleBoltClick: function(x, y) {
+            if(this.activeTool !== 'bolt') return;
+            let target = null, minD = 40;
+            for(let r=0; r<5; r++) for(let c=0; c<5; c++) if(currentMap[r][c]) {
+                const p = getPos(r,c); if(Math.hypot(x-(p.x+CONSTANTS.W/2), y-(p.y+CONSTANTS.H/2)) < minD) target = {r,c};
+            }
+            if(target && grid[target.r][target.c] && this.checkCost(100)) {
+                const r = target.r, c = target.c; const p = getPos(r, c);
+                const bolt = document.createElement('div'); bolt.className = 'lightning-strike-fx';
+                bolt.style.left = (p.x + CONSTANTS.W/2 - 20) + 'px'; bolt.style.bottom = (440 - p.y - CONSTANTS.H/2) + 'px';
+                stageEl.appendChild(bolt); SoundManager.playThunder();
+                bolt.animate([{ height: '1000px', opacity: 0, transform: 'scaleX(0.5)' }, { height: '1000px', opacity: 1, transform: 'scaleX(1.2)', offset: 0.1 }, { height: '100px', opacity: 0, transform: 'scaleX(0.1)', offset: 1 }], { duration: 400, easing: 'ease-out' }).onfinish = () => bolt.remove();
+                stageEl.animate([{transform:'translate(0,0)'},{transform:'translate(-4px, 4px)', offset:0.1},{transform:'translate(0,0)'}], {duration:300});
+                setTimeout(() => {
+                     const el = grid[r][c].el; el.style.transform = "scale(0)"; el.style.opacity = "0";
+                     spawnBouncingSparks(p.x, p.y); setTimeout(()=>el.remove(), 200); grid[r][c] = null; this.reset();
+                }, 100);
+            } else if(target) SoundManager.playError();
+        },
+        enableClawDrag: function() {
+            // 修改点：增加 && grid[r][c].el 判断，防止字符串 'INVALID' 导致报错
+            for(let r=0; r<5; r++) for(let c=0; c<5; c++) if(grid[r][c] && grid[r][c].el && !grid[r][c].hasClawBind) {
+                this.bindClawDragEvent(grid[r][c].el, r, c); grid[r][c].hasClawBind = true;
+            }
+        },
+        bindClawDragEvent: function(el, r, c) {
+            const start = (e) => {
+                if(this.activeTool !== 'claw' || isLock) return;
+                e.preventDefault(); e.stopPropagation(); const p = e.touches?e.touches[0]:e; SoundManager.playPick();
+                const rect = el.getBoundingClientRect(); el.style.opacity = 0;
+                const clone = el.cloneNode(true); clone.className = el.className + ' dragging-clone';
+                clone.style.width = CONSTANTS.W+'px'; clone.style.height = CONSTANTS.H+'px'; clone.style.left = rect.left+'px'; clone.style.top = rect.top+'px'; clone.style.opacity = 1;
+                document.body.appendChild(clone);
+                requestAnimationFrame(() => { clone.classList.add('smooth-move'); updatePos(p.clientX, p.clientY); setTimeout(()=>clone.classList.remove('smooth-move'), 150); });
+                const updatePos = (cx, cy) => { clone.style.left = (cx - CONSTANTS.W/2 + CONSTANTS.DRAG_OFFSET_X) + 'px'; clone.style.top = (cy - CONSTANTS.H/2 + CONSTANTS.DRAG_OFFSET_Y) + 'px'; };
+                const checkHigh = () => {
+                    document.querySelectorAll('.highlight-target').forEach(x=>x.classList.remove('highlight-target'));
+                    const cr = clone.getBoundingClientRect(); const cx = cr.left+cr.width/2, cy = cr.top+cr.height/2;
+                    let t=null, min=9999; const sRect = stageEl.getBoundingClientRect();
+                    for(let rr=0; rr<5; rr++) for(let cc=0; cc<5; cc++) if(grid[rr][cc]===null && currentMap[rr][cc]) {
+                        const pos = getPos(rr,cc); const d = Math.hypot(cx-(pos.x+sRect.left+CONSTANTS.W/2), cy-(pos.y+sRect.top+CONSTANTS.H/2));
+                        if(d<50 && d<min) { min=d; t={r:rr,c:cc}; }
+                    }
+                    if(t) document.getElementById(`base-${t.r}-${t.c}`).classList.add('highlight-target'); return t;
+                };
+                const move = (ev) => { ev.preventDefault(); const pp = ev.touches?ev.touches[0]:ev; updatePos(pp.clientX, pp.clientY); checkHigh(); };
+                const end = (ev) => {
+                    document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', end); document.removeEventListener('touchmove', move); document.removeEventListener('touchend', end);
+                    const t = checkHigh(); document.querySelectorAll('.highlight-target').forEach(x=>x.classList.remove('highlight-target'));
+                    if(t && this.checkCost(100)) {
+                        SoundManager.playZip(); const itemData = grid[r][c]; grid[r][c] = null; grid[t.r][t.c] = itemData;
+                        const newPos = getPos(t.r, t.c); el.style.left = newPos.x + 'px'; el.style.top = newPos.y + 'px'; el.style.zIndex = 100 + t.r*10; el.style.opacity = 1;
+                        itemData.hasClawBind = false; clone.remove(); this.reset(); setTimeout(() => place(t.r, t.c, null, true), 200);
+                    } else {
+                        clone.classList.add('smooth-move'); clone.style.left = rect.left+'px'; clone.style.top = rect.top+'px';
+                        setTimeout(()=>{ clone.remove(); el.style.opacity = 1; }, 200); if(t) SoundManager.playError();
+                    }
+                };
+                document.addEventListener('mousemove', move); document.addEventListener('mouseup', end); document.addEventListener('touchmove', move, {passive:false}); document.addEventListener('touchend', end);
+            };
+            el.addEventListener('mousedown', start); el.addEventListener('touchstart', start, {passive:false});
+        },
+        tryUseRefresh: function() {
+            let allItems = [], validSlots = [];
+            for(let r=0; r<5; r++) for(let c=0; c<5; c++) if(currentMap[r][c]) { validSlots.push({r,c}); if(grid[r][c]) allItems.push(grid[r][c]); }
+            if(allItems.length < 2) { SoundManager.playError(); return; } 
+            if(this.checkCost(100)) {
+                SoundManager.playMagic(); this.reset();
+                for(let r=0; r<5; r++) for(let c=0; c<5; c++) grid[r][c] = null;
+                for(let i = validSlots.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [validSlots[i], validSlots[j]] = [validSlots[j], validSlots[i]]; }
+                allItems.forEach((item, idx) => {
+                    const slot = validSlots[idx]; grid[slot.r][slot.c] = item; const p = getPos(slot.r, slot.c);
+                    item.el.style.transition = "left 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), top 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)";
+                    item.el.style.left = p.x + 'px'; item.el.style.top = p.y + 'px'; item.el.style.zIndex = 100 + slot.r*10; item.hasClawBind = false;
+                });
+                setTimeout(() => triggerGlobalMerge(), 600);
+            }
+        }
+    };
+    
+    async function triggerGlobalMerge() {
+        isLock = true; let active = true, checkQueue = [];
+        for(let r=0; r<5; r++) for(let c=0; c<5; c++) if(grid[r][c]) checkQueue.push({r,c});
+        while(active) {
+            active = false; let currentBatch = [...checkQueue]; checkQueue = [];
+            for(let pos of currentBatch) {
+                if(!grid[pos.r][pos.c]) continue;
+                let center = grid[pos.r][pos.c]; const topC = center.items[center.items.length-1];
+                const nbs = getNeighbors(pos.r, pos.c).filter(n => { const arr = n.node.items; return arr.length && arr[arr.length-1]===topC; });
+                if(nbs.length > 0) { await processMerge(pos.r, pos.c, checkQueue); active = true; } 
+                else {
+                    let beforeLen = center.items.length; await checkElimination(pos.r, pos.c, checkQueue);
+                    if(!grid[pos.r][pos.c] || grid[pos.r][pos.c].items.length < beforeLen) active = true;
+                }
+            }
+        }
+        isLock = false;
+        checkLoseCondition();
+    }
+
+    function initGame() {
+        btnStart.onclick = startGame; 
+        btnSound.onclick = () => { let e = SoundManager.toggle(); btnSound.innerText = e ? "SOUND: ON" : "SOUND: OFF"; btnSound.style.background = e ? "#8daec9" : "#546e7a"; };
+        btnClaim.onclick = () => completeLevel(1);
+        btnDoubleClaim.onclick = () => completeLevel(2);
+        btnRestart.onclick = () => { gameOverEl.classList.add('hidden'); loadLevel(currentLevelIdx); };
+        btnRevive.onclick = handleRevive;
+        stageEl.addEventListener('mousemove', (e) => { const rect = stageEl.getBoundingClientRect(); ToolManager.handleBoltHover(e.clientX - rect.left, e.clientY - rect.top); });
+        stageEl.addEventListener('mouseleave', () => { if(ToolManager.activeTool === 'bolt') { document.querySelectorAll('.bolt-hover-glow').forEach(el => el.classList.remove('bolt-hover-glow')); document.querySelectorAll('.bolt-target-stack').forEach(el => el.classList.remove('bolt-target-stack')); }});
+        stageEl.addEventListener('click', (e) => { const rect = stageEl.getBoundingClientRect(); ToolManager.handleBoltClick(e.clientX - rect.left, e.clientY - rect.top); });
+        updateCoinUI(); updateMenuInfo();
+    }
+
+    function startGame() { SoundManager.init(); menuEl.classList.add('hidden'); isLock = false; loadLevel(currentLevelIdx); }
+
+    async function completeLevel(multiplier) {
+        if (isLevelTransition) return; isLevelTransition = true; 
+        const reward = 50 * multiplier;
+        const startRect = rewardBox.getBoundingClientRect(); const endRect = coinUiBox.getBoundingClientRect();
+        const coinPromises = [];
+        for(let i=0; i<8; i++) coinPromises.push(flyCoin(startRect.left+startRect.width/2, startRect.top+startRect.height/2, endRect.left+endRect.width/2, endRect.top+endRect.height/2, i * 40));
+        await Promise.all(coinPromises);
+        playerCoins += reward; updateCoinUI();
+        levelUpEl.classList.add('hidden'); 
+        if (currentLevelIdx < 20) currentLevelIdx++;
+        setTimeout(() => { loadLevel(currentLevelIdx); setTimeout(() => { isLevelTransition = false; }, 500); }, 500);
+    }
+
+    function flyCoin(sx, sy, ex, ey, delay) {
+        return new Promise(resolve => {
+            setTimeout(() => {
+                const c = document.createElement('div'); c.className = 'flying-coin'; 
+                
+                // 这里飞行金币动画也兼容位图或SVG，简单起见保留SVG，因为它需要动态创建
+                c.innerHTML = `<svg viewBox="0 0 32 32" style="width:100%;height:100%"><circle cx="16" cy="16" r="15" fill="#FFC107" stroke="#FF8F00" stroke-width="2"/><circle cx="16" cy="16" r="10" fill="#FFD54F"/></svg>`;
+                
+                c.style.left = sx + 'px'; c.style.top = sy + 'px'; document.body.appendChild(c);
+                const angle = Math.random() * Math.PI * 2; const scatterDist = 60 + Math.random() * 40;
+                requestAnimationFrame(() => {
+                    c.style.transition = 'transform 0.3s ease-out'; c.style.transform = `translate(${Math.cos(angle)*scatterDist}px, ${Math.sin(angle)*scatterDist}px) rotate(${Math.random()*90}deg)`;
+                    setTimeout(() => {
+                        c.style.transition = 'transform 0.6s ease-in, opacity 0.5s'; c.style.transform = `translate(${ex - sx}px, ${ey - sy}px) scale(0.5)`;
+                        setTimeout(() => { c.remove(); coinUiBox.classList.remove('scale-bump'); void coinUiBox.offsetWidth; coinUiBox.classList.add('scale-bump'); SoundManager.playCoin(); resolve(); }, 600);
+                    }, 350);
+                });
+            }, delay);
+        });
+    }
+
+    function loadLevel(idx) {
+        ToolManager.reset(); if(idx >= LEVELS.length) idx = LEVELS.length-1; 
+        const d = LEVELS[idx]; score = 0; scoreEl.innerText = "0"; 
+        if (idx === 20) { targetScoreEl.innerText = "ENDLESS MODE"; levelUiEl.innerText = "LEVEL 21 (∞)"; } 
+        else { targetScoreEl.innerText = `GOAL: ${d.target}`; levelUiEl.innerText = `LEVEL ${d.id}`; }
+        currentMap = MAP_PATTERNS[d.map] || MAP_PATTERNS['CROSS']; createGrid();
+        const sortedPrefilled = [...d.prefilled].sort((a, b) => b.r - a.r);
+        let animDelay = 0;
+        sortedPrefilled.forEach(p => { setTimeout(() => { spawnPremadeStack(p.r, p.c, p.items, true); }, animDelay); animDelay += 100; });
+        dock = [null,null,null]; dockSlots.forEach(s=>s.innerHTML='');
+        setTimeout(() => { spawnDock(); isLock = false; }, animDelay + 200);
+    }
+
+    function updateCoinUI() { coinEl.innerText = playerCoins; }
+    function updateMenuInfo() { menuBadge.innerText = currentLevelIdx === 20 ? "LEVEL ∞" : `LEVEL ${currentLevelIdx+1}`; }
+    function getPos(r,c) { const ox = (r%2)*(CONSTANTS.GAP_X/2); return { x: c*CONSTANTS.GAP_X + ox + CONSTANTS.OFFSET_X, y: r*CONSTANTS.GAP_Y + CONSTANTS.OFFSET_Y }; }
+    
+    function createGrid() {
+        stageEl.innerHTML = ''; grid = [];
+        for(let r=0; r<5; r++) {
+            grid[r] = [];
+            for(let c=0; c<5; c++) {
+                if(currentMap[r][c]) {
+                    grid[r][c] = null; const b = document.createElement('div'); b.className = 'grid-base'; b.id = `base-${r}-${c}`;
+                    const p = getPos(r,c); b.style.left = p.x+'px'; b.style.top = p.y+'px'; b.style.zIndex = 90 + r*10; stageEl.appendChild(b);
+                } else grid[r][c] = 'INVALID';
+            }
+        }
+    }
+
+    function createStack(items, loc='dock', r=0) {
+        const c = document.createElement('div'); c.className = 'stack-container';
+        if(loc==='dock') c.classList.add('in-dock'); else c.style.zIndex = 100 + r*10;
+        renderStackVisuals(c, items); return c;
+    }
+
+    function spawnPremadeStack(r,c,items, animate=false) {
+        const el = createStack([...items], 'board', r); const p = getPos(r,c);
+        el.style.left = p.x+'px'; el.style.top = p.y+'px';
+        if(animate) { el.classList.add('pop-in'); SoundManager.playPick(); }
+        stageEl.appendChild(el); grid[r][c] = { items: [...items], el: el };
+    }
+
+    function renderStackVisuals(container, items) {
+        container.innerHTML = ''; const count = Math.min(items.length, 12);
+        for(let i=0; i<count; i++) {
+            const l = document.createElement('div'); l.className = `chip-layer c-${items[i]}`; l.style.top = -(i*CONSTANTS.LAYER_H)+'px';
+            l.style.filter = `brightness(${1 - (count-1-i)*0.05})`; container.appendChild(l);
+        }
+        if(items.length>0) {
+            const t = document.createElement('div'); t.className = 'count-label';
+            let topC = items[items.length-1], grp=0; for(let k=items.length-1; k>=0; k--) if(items[k]===topC) grp++; else break;
+            t.innerText = grp; t.style.top = -(count*CONSTANTS.LAYER_H)+'px'; container.appendChild(t);
+        }
+    }
+
+    function spawnBouncingSparks(x, y) {
+        const count = 12; const centerX = x + CONSTANTS.W/2; const centerY = y + CONSTANTS.H/2;
+        for(let i=0; i<count; i++) {
+            const s = document.createElement('div'); s.className = 'spark-particle';
+            s.style.left = centerX + 'px'; s.style.top = centerY + 'px'; s.style.background = '#fff'; stageEl.appendChild(s);
+            let vx = (Math.random() - 0.5) * 8, vy = -(Math.random() * 8 + 4), life = 1.0;
+            function update() {
+                s.style.left = (parseFloat(s.style.left) + vx) + 'px'; s.style.top = (parseFloat(s.style.top) + vy) + 'px';
+                vy += 0.5; life -= 0.02; s.style.opacity = life;
+                if(life > 0 && parseFloat(s.style.top) < 450) requestAnimationFrame(update); else s.remove();
+            }
+            requestAnimationFrame(update);
+        }
+    }
+
+    function spawnBurstParticles(x, y, color) {
+        const count = 8; const centerX = x + CONSTANTS.W/2; const centerY = y + CONSTANTS.H/2;
+        for(let i=0; i<count; i++) {
+            const s = document.createElement('div'); s.className = 'spark-particle';
+            s.style.left = centerX + 'px'; s.style.top = centerY + 'px'; s.style.backgroundColor = color; s.style.width = (4 + Math.random()*4)+'px'; s.style.height = s.style.width; stageEl.appendChild(s);
+            const angle = (i/count)*Math.PI*2 + Math.random()*0.5, speed = 2+Math.random()*3;
+            let vx = Math.cos(angle)*speed, vy = Math.sin(angle)*speed, opacity = 1;
+            function anim() {
+                s.style.left = (parseFloat(s.style.left)+vx)+'px'; s.style.top = (parseFloat(s.style.top)+vy)+'px'; opacity -= 0.05; s.style.opacity = opacity; s.style.transform = `scale(${opacity})`;
+                if(opacity>0) requestAnimationFrame(anim); else s.remove();
+            }
+            requestAnimationFrame(anim);
+        }
+    }
+
+    function spawnDock() {
+        // 1. 强制重置工具状态 (修复"道具卡住"的问题)
+        // [修改前] 只是手动清除了变量和样式，导致状态不同步
+        // ToolManager.activeTool = null;
+        // document.body.classList.remove('claw-mode', 'cursor-bolt');
+        // document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+
+        // [修改后] 直接调用管理器的重置方法，彻底清除所有状态和事件监听
+        ToolManager.reset();
+
+        // 2. 原有逻辑
+        dock.forEach((d,i) => {
+            if(d) return;
+            const base = COLORS[Math.floor(Math.random()*COLORS.length)];
+            let items = Array(Math.floor(Math.random()*4)+2).fill(base);
+            if(Math.random() < 0.15) { const sub = COLORS[Math.floor(Math.random()*COLORS.length)]; if(sub!==base) items = [...Array(2).fill(sub), ...items]; }
+            dock[i] = {items}; const slot = dockSlots[i]; slot.innerHTML = '';
+            const el = createStack(items, 'dock'); el.style.top = '15px'; el.classList.add('pop-in'); bindDrag(el, i); slot.appendChild(el);
+        });
+        
+        setTimeout(checkLoseCondition, 500);
+
+        // 3. 强制解除游戏锁定 (修复"拖不动"的问题)
+        isLock = false; 
+    }
+    function bindDrag(el, idx) {
+        const start = (e) => {
+            if(isLock || ToolManager.activeTool || document.body.classList.contains('claw-mode')) return;
+            e.preventDefault(); const p = e.touches?e.touches[0]:e; SoundManager.playPick();
+            const rect = el.getBoundingClientRect(); el.style.opacity = 0;
+            const clone = el.cloneNode(true); clone.className = el.className + ' dragging-clone'; clone.classList.remove('in-dock', 'pop-in');
+            const last = clone.querySelector('.chip-layer:last-child'); if(last) last.style.animation = 'none'; 
+            clone.style.width = CONSTANTS.W+'px'; clone.style.height = CONSTANTS.H+'px'; clone.style.left = rect.left+'px'; clone.style.top = rect.top+'px'; clone.style.opacity = 1;
+            document.body.appendChild(clone);
+            requestAnimationFrame(() => { clone.classList.add('smooth-move'); updatePos(p.clientX, p.clientY); setTimeout(()=>clone.classList.remove('smooth-move'), 150); });
+            const updatePos = (cx, cy) => { clone.style.left = (cx - CONSTANTS.W/2 + CONSTANTS.DRAG_OFFSET_X) + 'px'; clone.style.top = (cy - CONSTANTS.H/2 + CONSTANTS.DRAG_OFFSET_Y) + 'px'; };
+            const checkHigh = () => {
+                document.querySelectorAll('.highlight-target').forEach(x=>x.classList.remove('highlight-target'));
+                const cr = clone.getBoundingClientRect(); const cx = cr.left+cr.width/2, cy = cr.top+cr.height/2; let t=null, min=9999; const sRect = stageEl.getBoundingClientRect();
+                for(let r=0; r<5; r++) { for(let c=0; c<5; c++) { if(grid[r][c]===null && currentMap[r][c]) { const pos = getPos(r,c); const tx = pos.x+sRect.left+CONSTANTS.W/2; const ty = pos.y+sRect.top+CONSTANTS.H/2; const d = Math.hypot(cx-tx, cy-ty); if(d<50 && d<min) { min=d; t={r,c}; } } } }
+                if(t) document.getElementById(`base-${t.r}-${t.c}`).classList.add('highlight-target'); return t;
+            };
+            const move = (ev) => { ev.preventDefault(); const pp = ev.touches?ev.touches[0]:ev; updatePos(pp.clientX, pp.clientY); checkHigh(); };
+            const end = (ev) => {
+                document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', end); document.removeEventListener('touchmove', move); document.removeEventListener('touchend', end);
+                const t = checkHigh(); document.querySelectorAll('.highlight-target').forEach(x=>x.classList.remove('highlight-target'));
+                if(t) { SoundManager.playDrop(); place(t.r, t.c, dock[idx]); dock[idx] = null; dockSlots[idx].innerHTML = ''; clone.remove(); }
+                else { clone.classList.add('smooth-move'); clone.style.left = rect.left+'px'; clone.style.top = rect.top+'px'; setTimeout(()=>{ clone.remove(); el.style.opacity = 1; }, 200); }
+            };
+            document.addEventListener('mousemove', move); document.addEventListener('mouseup', end); document.addEventListener('touchmove', move, {passive:false}); document.addEventListener('touchend', end);
+        };
+        el.addEventListener('mousedown', start); el.addEventListener('touchstart', start, {passive:false});
+    }
+
+    async function place(r, c, data, isMove=false) {
+        isLock = true; if(!isMove && data) spawnPremadeStack(r, c, data.items);
+        let queue = [{r,c}];
+        while(queue.length) { let cur = queue.shift(); if(grid[cur.r][cur.c]) await processMerge(cur.r, cur.c, queue); }
+        
+        if(score >= LEVELS[currentLevelIdx].target && currentLevelIdx < 20) { 
+            setTimeout(()=>{ 
+                SoundManager.playChime(); fireConfetti(); 
+                winCoinText.innerText = "+50";
+                levelUpEl.classList.remove('hidden'); 
+            }, 800); 
+        } else { 
+            if(dock.every(x=>x===null)) setTimeout(spawnDock, 300); 
+            else checkLoseCondition();
+            isLock = false; eliminationCombo = 0; 
+        }
+    }
+
+    function checkLoseCondition() {
+        if (isLock) return;
+        let hasEmpty = false;
+        for(let r=0; r<5; r++) for(let c=0; c<5; c++) if(currentMap[r][c] && grid[r][c] === null) hasEmpty = true;
+        if(!hasEmpty) {
+             setTimeout(() => {
+                 if(document.querySelectorAll('.stack-container.in-dock').length > 0) {
+                    SoundManager.playError();
+                    gameOverEl.classList.remove('hidden');
+                 }
+             }, 1000);
+        }
+    }
+
+    function handleRevive() {
+        btnRevive.innerText = "LOADING...";
+        setTimeout(() => {
+            btnRevive.innerText = "AD REVIVE";
+            gameOverEl.classList.add('hidden');
+            let candidates = [];
+            for(let r=0; r<5; r++) for(let c=0; c<5; c++) if(grid[r][c]) candidates.push({r,c});
+            for(let i=candidates.length-1; i>0; i--) { const j = Math.floor(Math.random()*(i+1)); [candidates[i], candidates[j]] = [candidates[j], candidates[i]]; }
+            const toRemove = candidates.slice(0, 3);
+            toRemove.forEach(pos => {
+                const el = grid[pos.r][pos.c].el;
+                el.style.transform = "scale(0)";
+                spawnBurstParticles(getPos(pos.r, pos.c).x, getPos(pos.r, pos.c).y, '#fff');
+                grid[pos.r][pos.c] = null;
+                setTimeout(() => el.remove(), 300);
+            });
+            SoundManager.playMagic();
+        }, 1500);
+    }
+
+    function fireConfetti() {
+        const colors = ['#ff4757', '#2ed573', '#1e90ff', '#ffa502', '#ffffff']; const count = 100;
+        for(let i=0; i<count; i++) {
+            const c = document.createElement('div'); c.className = 'confetti'; c.style.backgroundColor = colors[Math.floor(Math.random()*colors.length)];
+            const isLeft = i%2===0; const startX = isLeft ? 0 : window.innerWidth; const startY = window.innerHeight;
+            c.style.left = startX + 'px'; c.style.top = startY + 'px'; document.body.appendChild(c);
+            const angleBase = isLeft ? -Math.PI/3 : -Math.PI/1.5, angleSpread = (Math.random() - 0.5) * 0.5, velocity = 15 + Math.random() * 15;
+            let vx = Math.cos(angleBase + angleSpread) * velocity; if(!isLeft && vx > 0) vx = -vx; let vy = Math.sin(angleBase + angleSpread) * velocity;
+            const anim = () => {
+                c.style.left = (parseFloat(c.style.left) + vx) + 'px'; c.style.top = (parseFloat(c.style.top) + vy) + 'px';
+                vy += 0.6; vx *= 0.96; c.style.transform = `rotate(${Math.random()*360}deg)`;
+                if(parseFloat(c.style.top) < window.innerHeight + 20) requestAnimationFrame(anim); else c.remove();
+            };
+            requestAnimationFrame(anim);
+        }
+    }
+
+    function getNeighbors(r, c) {
+        const offsets = (r%2===0) ? [[-1,-1],[-1,0],[0,-1],[0,1],[1,-1],[1,0]] : [[-1,0],[-1,1],[0,-1],[0,1],[1,0],[1,1]]; let res = [];
+        offsets.forEach(o => { const nr=r+o[0], nc=c+o[1]; if(nr>=0 && nr<5 && nc>=0 && nc<5 && grid[nr][nc] && grid[nr][nc]!=='INVALID') res.push({r:nr, c:nc, node:grid[nr][nc]}); }); return res;
+    }
+
+    async function processMerge(r, c, queue) {
+        let center = grid[r][c]; if(!center || !center.items.length) return;
+        const topC = center.items[center.items.length-1];
+        const nbs = getNeighbors(r, c).filter(n => { const arr = n.node.items; return arr.length && arr[arr.length-1]===topC; });
+        if(!nbs.length) { await checkElimination(r, c, queue); return; }
+        for(let n of nbs) {
+            const src = n.node; grid[n.r][n.c] = null; const sPos = getPos(n.r, n.c); const tPos = getPos(r, c);
+            while(src.items.length && src.items[src.items.length-1]===topC) {
+                let col = src.items.pop(); renderStackVisuals(src.el, src.items);
+                const f = document.createElement('div'); f.className = `chip-layer c-${col} flying-chip`; f.style.left = sPos.x+'px'; f.style.top = (sPos.y - src.items.length*6)+'px'; stageEl.appendChild(f);
+                f.getBoundingClientRect(); f.style.left = tPos.x+'px'; f.style.top = (tPos.y - center.items.length*6)+'px';
+                SoundManager.playZip(); await new Promise(r=>setTimeout(r, 40)); f.remove(); center.items.push(col); renderStackVisuals(center.el, center.items);
+            }
+            if(src.items.length===0) src.el.remove(); else { grid[n.r][n.c] = src; queue.push({r:n.r, c:n.c}); }
+        }
+        await checkElimination(r, c, queue);
+    }
+
+    async function checkElimination(r, c, queue) {
+        let center = grid[r][c]; if(!center) return;
+        const items = center.items; const topC = items[items.length-1];
+        let sameCount = 0; for(let i=items.length-1; i>=0; i--) if(items[i]===topC) sameCount++; else break;
+        if(sameCount >= 10) { 
+            while(sameCount > 0) {
+                const layers = center.el.querySelectorAll('.chip-layer'); const visualIndex = Math.min(items.length, 12) - 1;
+                if(visualIndex >= 0 && layers[visualIndex]) { layers[visualIndex].classList.add('chip-flash-seq'); SoundManager.playFlash(); await new Promise(res => setTimeout(res, 50)); }
+                const removed = items.pop(); sameCount--; score += 1; scoreEl.innerText = score;
+                const p = getPos(r, c); spawnBurstParticles(p.x, p.y, COLOR_HEX[removed]);
+                SoundManager.playPop(eliminationCombo); renderStackVisuals(center.el, items); await new Promise(res => setTimeout(res, 20));
+            }
+            eliminationCombo++; if(items.length===0) { center.el.remove(); grid[r][c] = null; } else { queue.push({r,c}); } await new Promise(res=>setTimeout(res, 100));
+        }
+    }
+    
+    initGame();
+</script>
+</body>
+</html>
